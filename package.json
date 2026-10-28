@@ -1,0 +1,17 @@
+{
+  "name": "local-transcript-ant",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "@desert-ant-labs/voz": "4.2.1",
+    "@desert-ant-labs/who": "4.2.1",
+    "@litertjs/core": "2.6.0",
+    "onnxruntime-web": "1.31.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.10"
+  }
+}
