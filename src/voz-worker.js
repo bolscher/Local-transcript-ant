@@ -10,6 +10,7 @@ self.onmessage = async ({ data }) => {
     if (type === "load") {
       voz ??= await Voz.load({
         wasmDir: data.wasmDir,
+        cache: data.cache,
         onProgress: (f) => self.postMessage({ id, progress: f }),
       });
       self.postMessage({ id, done: true });

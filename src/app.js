@@ -10,10 +10,13 @@ const PARAGRAPH_GAP = 4;       // seconden stilte waarna een nieuwe alinea begin
 const MIN_SPEAKER_SHARE = 0.02;
 const STORE_KEY = "lt.transcript.v1";
 const LOAD_FLAG = "lt.loading";
+const MODEL_CACHE = "lt-models-v1"; // gelijk aan sw.js
+// Met service worker bewaart die de modelbestanden; Voz hoeft dat dan niet zelf.
+const HAS_SW = "serviceWorker" in navigator;
 
 const $ = (id) => document.getElementById(id);
 const ui = {
-  pillVoz: $("pillVoz"), pillWho: $("pillWho"), btnLoad: $("btnLoad"),
+  pillVoz: $("pillVoz"), pillWho: $("pillWho"), pillOffline: $("pillOffline"), btnLoad: $("btnLoad"),
   btnRec: $("btnRec"), timer: $("timer"), level: $("level"),
   status: $("status"), progress: $("progress"), fileInput: $("fileInput"), btnImport: $("btnImport"),
   speakers: $("speakers"), scroll: $("scroll"), empty: $("empty"), segments: $("segments"),
@@ -45,6 +48,9 @@ function loadModels() {
     ui.btnLoad.disabled = true;
     try { localStorage.setItem(LOAD_FLAG, String(Date.now())); } catch {}
     try {
+      // Pas laden als de service worker de downloads kan opvangen, anders
+      // werkt de app de volgende keer niet offline.
+      await serviceWorkerControl();
       if (!models.who) {
         setPill(ui.pillWho, "loading", "Who: laden…");
         const { Who } = await import("@desert-ant-labs/who");
@@ -59,6 +65,7 @@ function loadModels() {
         models.voz = await loadVoz((f) => setPill(ui.pillVoz, "loading", `Voz: ${pct(f)}`));
         setPill(ui.pillVoz, "ready", "Voz: klaar");
       }
+      updateOfflinePill();
       ui.btnLoad.hidden = true;
       if (!rec.active && !busy) setStatus("Klaar. Druk op de opnameknop of kies een audiobestand.");
     } catch (err) {
@@ -100,7 +107,7 @@ async function loadVoz(onProgress) {
       for (const c of calls.values()) c.reject(new Error(e.message || "Voz-worker gestopt"));
       calls.clear();
     };
-    await call({ type: "load", wasmDir }, onProgress);
+    await call({ type: "load", wasmDir, cache: !HAS_SW }, onProgress);
     return {
       // De samples worden overgedragen, dus altijd een kopie meegeven.
       transcribe: (samples, opts = {}) => {
@@ -111,7 +118,7 @@ async function loadVoz(onProgress) {
   } catch (err) {
     console.warn("Voz in worker mislukt, verder in de pagina:", err);
     const { Voz } = await import("@desert-ant-labs/voz");
-    return Voz.load({ wasmDir, onProgress });
+    return Voz.load({ wasmDir, onProgress, cache: !HAS_SW });
   }
 }
 
@@ -124,9 +131,45 @@ function friendlyError(err) {
 
 async function modelsCached() {
   try {
-    const keys = await caches.keys();
-    return keys.some((k) => k.startsWith("desert-ant-voz"));
+    if (!HAS_SW) return (await caches.keys()).some((k) => k.startsWith("desert-ant-voz"));
+    const urls = (await (await caches.open(MODEL_CACHE)).keys()).map((r) => r.url);
+    return ["/desert-ant-labs/voz/", "/desert-ant-labs/who/"].every((m) => urls.some((u) => u.includes(m)));
   } catch { return false; }
+}
+
+// ---------- Offline ----------
+
+async function registerServiceWorker() {
+  if (!HAS_SW) return;
+  try {
+    const reg = await navigator.serviceWorker.register("sw.js");
+    // Een nieuwe versie direct gebruiken zolang er nog niets loopt.
+    if (reg.waiting && navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener("controllerchange", () => location.reload(), { once: true });
+      reg.waiting.postMessage("skipWaiting");
+      return;
+    }
+    navigator.serviceWorker.addEventListener("controllerchange", updateOfflinePill);
+    navigator.storage?.persist?.().catch(() => {});
+  } catch (err) {
+    console.warn("Service worker niet geregistreerd:", err);
+  }
+}
+
+// Wacht (maximaal tien seconden) tot de service worker deze pagina beheert.
+async function serviceWorkerControl() {
+  if (!HAS_SW || navigator.serviceWorker.controller) return;
+  await Promise.race([
+    new Promise((resolve) => navigator.serviceWorker.addEventListener("controllerchange", resolve, { once: true })),
+    new Promise((resolve) => setTimeout(resolve, 10000)),
+  ]);
+}
+
+async function updateOfflinePill() {
+  if (!HAS_SW) return setPill(ui.pillOffline, "error", "Offline: niet mogelijk");
+  const app = !!navigator.serviceWorker.controller;
+  const cached = app && (await modelsCached());
+  setPill(ui.pillOffline, cached ? "ready" : "idle", cached ? "Offline: klaar" : "Offline: nog niet");
 }
 
 // ---------- Opnemen ----------
@@ -614,6 +657,7 @@ window.addEventListener("beforeunload", (e) => {
 restore();
 render();
 updateButtons();
+registerServiceWorker().then(updateOfflinePill);
 
 if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
   setStatus("<strong>Microfoon niet beschikbaar.</strong> Open deze pagina via https (of localhost); vanaf een los bestand werkt opnemen niet.");

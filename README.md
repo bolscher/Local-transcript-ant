@@ -14,6 +14,14 @@ Webpagina voor iPad (en andere browsers) die gesprekken opneemt, transcribeert e
 
 Een bestaand audiobestand verwerken kan via *Audiobestand…*.
 
+## Offline gebruik
+
+1. Open de pagina één keer met internet en tik op *Modellen laden*. Wacht tot rechtsboven *Offline: klaar* staat.
+2. Kies in Safari het deelmenu › *Zet op beginscherm*. De app start dan als losse app.
+3. Daarna werkt alles zonder internet: de app, beide modellen, opnemen en transcriberen.
+
+Een service worker bewaart de app (ongeveer 165 MB) en de modelbestanden (ongeveer 430 MB) op het apparaat, samen ongeveer 600 MB. Bij een nieuwe versie van de site wordt de app opnieuw opgehaald zodra je hem met internet opent; de modellen niet.
+
 ## Eisen
 
 * iPadOS/Safari 26 of nieuwer (WebGPU en Float16Array). Getest in Chromium; niet getest op een echte iPad.
@@ -32,7 +40,7 @@ Publiceer de map `docs/` op een statische host met https, bijvoorbeeld GitHub Pa
 ## Netwerkverkeer
 
 * Eenmalig: modelbestanden van `huggingface.co`.
-* Bij het laden van elk model: een licentiecontrole naar `events.desertant.com` met de domeinnaam van de site, een willekeurig installatie-id en de modelversie. Er gaat geen audio of tekst mee.
+* Bij het laden van elk model: een licentiecontrole naar `events.desertant.com` met de domeinnaam van de site, een willekeurig installatie-id en de modelversie. Er gaat geen audio of tekst mee. Zonder internet mislukt die controle; de modellen werken dan gewoon (getest in Chromium).
 
 ## Licentie
 
